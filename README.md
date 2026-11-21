@@ -1,0 +1,90 @@
+# Disk Wait
+
+A tiny Home Assistant integration that records the performance of the machine Home Assistant runs on, with a focus on finding out whether a slow disk is what makes the UI sluggish. It reads a few small kernel files once a minute and records them in the background like any other sensor. No dashboard or browser needs to be open.
+
+Built for HA OS on a Home Assistant Green, but it works on any Linux install.
+
+## Sensors
+
+**System performance** device
+
+| Sensor | What it tells you |
+|---|---|
+| CPU usage | Share of all CPU time that was busy. |
+| CPU iowait | Share of all CPU time spent idle *waiting on disk*. On a 4-core Green, 25 % means roughly one core stuck waiting. |
+| Load (1 min) | Runnable plus disk-blocked tasks. Load (5 min) and (15 min) are off by default. |
+| CPU temperature | SoC temperature, in half-degree steps. Only if the board exposes a thermal zone. |
+| Memory used | `MemTotal − MemAvailable`, in whole percent. Memory available (MiB) is off by default. |
+| Swap used / Swap activity | Swap fill, and KiB/s swapped in plus out. On HA OS swap is zram (compressed RAM), so steady activity means memory pressure rather than disk I/O. |
+| Unwritten disk cache | MiB of dirty and writeback pages waiting to be flushed. On a slow card this piles up before stalls. |
+| I/O pressure (some) | Share of wall-clock time at least one task was stalled on I/O. This is the best single "is the disk holding things up" number. The (full) variant is off by default. |
+| Memory pressure (some) | The same, for waiting on memory reclaim. The (full) variant is off by default. |
+| CPU pressure | Share of time runnable tasks waited for a CPU. |
+| Home Assistant CPU | CPU used by the Home Assistant Core process, as a share of the whole machine. |
+| Home Assistant memory | Resident memory of the Core process, in MiB. |
+| Event loop lag | Worst delay Home Assistant's event loop showed during the interval, in ms. This is what you *feel* as UI sluggishness. A healthy loop stays in single digits. |
+| Data disk used | Fill of the filesystem holding `/config`. Data disk free (GiB) is off by default. |
+| Recorder database size | Size of `home-assistant_v2.db` plus its WAL, in MiB. Only present when using the default SQLite recorder. |
+| Major page faults | Off by default. Page-ins from disk per second. |
+
+**Disk ⟨name⟩** device, for each disk you pick
+
+| Sensor | What it tells you |
+|---|---|
+| Read / Write throughput | KiB/s. |
+| Busy | Percent of time the disk had a request in flight (like `iostat %util`). Near 100 % means saturated. |
+| Read / Write latency | Average ms per completed request (like `iostat r_await` / `w_await`). microSD write latency in the hundreds of ms is the classic culprit. |
+| Read / Write IOPS, Requests in flight | Off by default. |
+
+**Network ⟨name⟩** device, for each interface you pick: Download and Upload in KiB/s.
+
+Sensors that are off by default can be enabled from the entity's settings. Pressure sensors only appear if the kernel exposes PSI (HA OS does).
+
+## Efficiency
+
+This is designed to run forever in the background and cost close to nothing.
+
+- **One executor job per poll.** Each poll reads about ten small files from `/proc` (kernel memory, not the disk) and does a little arithmetic. On a desktop CPU that takes about 0.3 ms. On the Green's Cortex-A55 expect a few ms once a minute, which works out to well under 0.01 % of one core. The event loop is never blocked.
+- **No discovery at runtime.** Which disks, interfaces, thermal zone and pressure files exist is worked out once at setup.
+- **Slow things are polled slowly.** Disk space and DB size are refreshed every 5 minutes, whatever the poll interval.
+- **The lag probe is a single timer** that fires every 5 s and compares when it ran with when it was due. There's no thread and no busy-waiting.
+- **Low recorder churn.** Home Assistant only writes a state row when the displayed value changes. Values are rounded to the coarsest useful step (whole percent for memory and swap, whole MiB, half degrees), there are no state attributes, and the extras are off by default. Every rate is averaged over the full interval from cumulative kernel counters, so the default 60 s interval loses resolution but never misses activity. As a rough guide, the default sensors on one disk and one interface produce at most about 33,000 small rows a day, and fewer when the system is idle. Raise the interval to cut that further.
+- **No dependencies.** It's pure Python standard library, and `requirements` is empty.
+
+## Security
+
+- No web UI, no listening sockets, no outbound connections, no cloud. `iot_class: local_polling`.
+- Read-only. It opens files under `/proc` and `/sys/class/thermal`, and calls `statvfs`/`stat` on `/config` and the recorder DB. It writes nothing.
+- It needs no add-on, no privileged access and no protection-mode changes.
+
+## Does a custom component see the right data?
+
+Yes. On HA OS, Home Assistant Core runs in a container on the same kernel and in the host network namespace. `/proc/stat`, `/proc/diskstats`, `/proc/meminfo`, `/proc/pressure/*` and `/proc/net/dev` are not namespaced, so they show the whole host, including the eMMC and the microSD card.
+
+## Install
+
+**HACS:** HACS → ⋮ → Custom repositories → add `https://github.com/GarbledMess/disk-wait` as type *Integration*. Then install *Disk Wait* and restart Home Assistant.
+
+**Manual:** copy `custom_components/disk_wait` into `/config/custom_components/` and restart Home Assistant.
+
+Then go to **Settings → Devices & services → Add integration → Disk Wait**. The form pre-selects the disk that holds `/config` and the interface with the default route. On a Home Assistant Green the eMMC is usually `mmcblk0` and a microSD card `mmcblk1`. Pick both to compare. You can change any of this later with **Configure**.
+
+## Reading the numbers
+
+Rate sensors show *unknown* for the first interval after start-up, while a baseline is taken.
+
+A sluggish moment caused by the disk usually looks like this, all at the same time:
+
+- Event loop lag jumps.
+- I/O pressure (some) rises well above a few percent.
+- Disk busy goes near 100 %.
+- Write latency spikes to hundreds of ms.
+
+If the loop lags while I/O stays quiet, compare Home Assistant CPU and CPU pressure, which point at a busy integration. Memory pressure and swap activity point at running out of RAM.
+
+## Development
+
+```sh
+pip install pytest-homeassistant-custom-component
+pytest
+```

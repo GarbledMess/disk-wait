@@ -1,0 +1,150 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Disk Wait",
+        "description": "Choose what to watch. Home Assistant's data looks like it is on **{data_disk}**. On a Home Assistant Green the built-in eMMC is usually mmcblk0 and a microSD card mmcblk1.",
+        "data": {
+          "disks": "Disks",
+          "scan_interval": "Poll interval",
+          "interfaces": "Network interfaces"
+        },
+        "data_description": {
+          "disks": "Disks to report throughput, busy % and latency for.",
+          "interfaces": "Interfaces to report traffic for. Leave empty for none.",
+          "scan_interval": "Rates are averaged over the whole interval, so a longer interval only lowers resolution and means fewer recorder writes."
+        }
+      }
+    },
+    "error": {
+      "no_disks": "Pick at least one disk."
+    },
+    "abort": {
+      "single_instance_allowed": "Disk Wait is already set up. Use Configure to change disks."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Disk Wait",
+        "description": "Home Assistant's data looks like it is on **{data_disk}**.",
+        "data": {
+          "disks": "Disks",
+          "scan_interval": "Poll interval",
+          "interfaces": "Network interfaces"
+        },
+        "data_description": {
+          "disks": "Disks to report throughput, busy % and latency for.",
+          "interfaces": "Interfaces to report traffic for. Leave empty for none.",
+          "scan_interval": "Rates are averaged over the whole interval, so a longer interval only lowers resolution and means fewer recorder writes."
+        }
+      }
+    },
+    "error": {
+      "no_disks": "Pick at least one disk."
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cpu": {
+        "name": "CPU usage"
+      },
+      "iowait": {
+        "name": "CPU iowait"
+      },
+      "load_1": {
+        "name": "Load (1 min)"
+      },
+      "load_5": {
+        "name": "Load (5 min)"
+      },
+      "load_15": {
+        "name": "Load (15 min)"
+      },
+      "cpu_temperature": {
+        "name": "CPU temperature"
+      },
+      "memory_used": {
+        "name": "Memory used"
+      },
+      "memory_available": {
+        "name": "Memory available"
+      },
+      "swap_used": {
+        "name": "Swap used"
+      },
+      "swap_activity": {
+        "name": "Swap activity"
+      },
+      "major_faults": {
+        "name": "Major page faults"
+      },
+      "dirty": {
+        "name": "Unwritten disk cache"
+      },
+      "io_pressure_some": {
+        "name": "I/O pressure (some)"
+      },
+      "io_pressure_full": {
+        "name": "I/O pressure (full)"
+      },
+      "memory_pressure_some": {
+        "name": "Memory pressure (some)"
+      },
+      "memory_pressure_full": {
+        "name": "Memory pressure (full)"
+      },
+      "cpu_pressure_some": {
+        "name": "CPU pressure"
+      },
+      "ha_cpu": {
+        "name": "Home Assistant CPU"
+      },
+      "ha_memory": {
+        "name": "Home Assistant memory"
+      },
+      "loop_lag": {
+        "name": "Event loop lag"
+      },
+      "disk_used": {
+        "name": "Data disk used"
+      },
+      "disk_free": {
+        "name": "Data disk free"
+      },
+      "db_size": {
+        "name": "Recorder database size"
+      },
+      "read": {
+        "name": "Read throughput"
+      },
+      "write": {
+        "name": "Write throughput"
+      },
+      "busy": {
+        "name": "Busy"
+      },
+      "read_latency": {
+        "name": "Read latency"
+      },
+      "write_latency": {
+        "name": "Write latency"
+      },
+      "read_iops": {
+        "name": "Read IOPS"
+      },
+      "write_iops": {
+        "name": "Write IOPS"
+      },
+      "in_flight": {
+        "name": "Requests in flight"
+      },
+      "rx": {
+        "name": "Download"
+      },
+      "tx": {
+        "name": "Upload"
+      }
+    }
+  }
+}
