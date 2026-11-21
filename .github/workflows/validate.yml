@@ -14,7 +14,9 @@ jobs:
       - uses: hacs/action@main
         with:
           category: integration
-          ignore: brands
+          # description and topics are repo settings that only matter for the
+          # HACS default store; custom-repository installs do not need them.
+          ignore: brands description topics
   hassfest:
     runs-on: ubuntu-latest
     steps:
