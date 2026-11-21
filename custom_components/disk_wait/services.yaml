@@ -1,0 +1,31 @@
+recorder_report:
+  fields:
+    hours:
+      default: 24
+      selector:
+        number:
+          min: 1
+          max: 720
+          unit_of_measurement: h
+    limit:
+      default: 15
+      selector:
+        number:
+          min: 1
+          max: 100
+    notify:
+      default: true
+      selector:
+        boolean:
+storage_report:
+  fields:
+    limit:
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 100
+    notify:
+      default: true
+      selector:
+        boolean:

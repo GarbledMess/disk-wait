@@ -1,7 +1,13 @@
 {
   "domain": "disk_wait",
   "name": "Disk Wait",
-  "codeowners": ["@GarbledMess"],
+  "after_dependencies": [
+    "hassio",
+    "recorder"
+  ],
+  "codeowners": [
+    "@GarbledMess"
+  ],
   "config_flow": true,
   "documentation": "https://github.com/GarbledMess/disk-wait",
   "integration_type": "service",
@@ -9,5 +15,5 @@
   "issue_tracker": "https://github.com/GarbledMess/disk-wait/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.2.0"
+  "version": "0.3.0"
 }

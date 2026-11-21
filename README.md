@@ -40,6 +40,38 @@ Built for HA OS on a Home Assistant Green, but it works on any Linux install.
 
 Sensors that are off by default can be enabled from the entity's settings. Pressure sensors only appear if the kernel exposes PSI (HA OS does).
 
+## On-demand reports
+
+Two buttons on the *System performance* device, also available as actions. They're the heavy checks, so they never run on a timer, only when you press one, call the action, or write your own automation. Results appear as a notification, and the actions also return them as response data.
+
+**Analyze recorder** (`disk_wait.recorder_report`, options `hours` and `limit`) runs one read-only query against the recorder database and shows:
+- the entities writing the most state rows, with rows per day, share of the total, how often their attributes changed, and a rough size;
+- the same totals grouped by integration, and the busiest event types;
+- a ready-to-paste `recorder: exclude:` snippet for entities above 1,000 rows a day.
+
+On a large SQLite database on a slow card the query can take tens of seconds. It runs in the recorder's own thread, so the UI stays responsive.
+
+**Analyze storage** (`disk_wait.storage_report`, HA OS / Supervised only) asks the Supervisor and shows:
+- the data disk breakdown you see under *Settings → System → Storage* (System, App data, Media, Share, Backups, Home Assistant), with the biggest folders in each;
+- each add-on's data size, memory, CPU and bytes written to disk since it started, which helps you spot the add-on wearing out a microSD card;
+- backups: how many there are, how much space they use on this device, the oldest and newest, and the largest.
+
+The Supervisor computes the disk breakdown by walking the data partition, so expect it to take a while on a microSD card.
+
+### What's in "System"?
+
+*System* is whatever the Supervisor doesn't attribute: container images (including old add-on versions left behind), container logs and the systemd journal. Home Assistant Core can't see those, and Disk Wait deliberately doesn't ask for more access. To break it down, use the *Advanced SSH & Web Terminal* add-on with protection mode off:
+
+```sh
+docker system df -v | head -40      # images, containers, volumes
+docker image prune -a               # remove images not used by any container
+journalctl --disk-usage             # systemd journal size
+du -sh /var/lib/docker/containers/*/*-json.log 2>/dev/null | sort -h | tail
+ha supervisor repair                # Supervisor's own cleanup
+```
+
+Run `docker image prune -a` only if you're happy to re-download any add-on you've stopped but not uninstalled.
+
 ## Efficiency
 
 This is designed to run forever in the background and cost close to nothing.
@@ -54,7 +86,7 @@ This is designed to run forever in the background and cost close to nothing.
 ## Security
 
 - No web UI, no listening sockets, no outbound connections, no cloud. `iot_class: local_polling`.
-- Read-only. It opens files under `/proc` and `/sys/class/thermal`, and calls `statvfs`/`stat` on `/config` and the recorder DB. It writes nothing.
+- Read-only. It opens files under `/proc` and `/sys/class/thermal`, and calls `statvfs`/`stat` on `/config` and the recorder DB. The reports make read-only `SELECT`s and read-only Supervisor API calls using the access Home Assistant Core already has. Disk Wait never deletes, prunes or changes anything.
 - It needs no add-on, no privileged access and no protection-mode changes.
 
 ## Does a custom component see the right data?

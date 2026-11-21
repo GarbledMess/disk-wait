@@ -145,6 +145,48 @@
       "tx": {
         "name": "Upload"
       }
+    },
+    "button": {
+      "recorder_report": {
+        "name": "Analyze recorder"
+      },
+      "storage_report": {
+        "name": "Analyze storage"
+      }
+    }
+  },
+  "services": {
+    "recorder_report": {
+      "name": "Recorder report",
+      "description": "Find the entities, integrations and event types writing the most rows to the recorder database. Read-only; runs one database query.",
+      "fields": {
+        "hours": {
+          "name": "Hours",
+          "description": "How far back to look."
+        },
+        "limit": {
+          "name": "Limit",
+          "description": "How many entities, integrations and event types to list."
+        },
+        "notify": {
+          "name": "Notify",
+          "description": "Also post the report as a notification."
+        }
+      }
+    },
+    "storage_report": {
+      "name": "Storage report",
+      "description": "Break down the data disk (System, add-on data, media, backups and so on) and list add-ons by data size, memory and disk writes, plus backups. Read-only; asks the Supervisor.",
+      "fields": {
+        "limit": {
+          "name": "Limit",
+          "description": "How many add-ons to list (0 for all)."
+        },
+        "notify": {
+          "name": "Notify",
+          "description": "Also post the report as a notification."
+        }
+      }
     }
   }
 }
