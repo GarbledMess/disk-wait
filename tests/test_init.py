@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import issue_registry as ir
 from pytest_homeassistant_custom_component.common import (
     MockConfigEntry,
     async_fire_time_changed,
@@ -132,8 +133,19 @@ async def test_setup_and_rates(hass: HomeAssistant, freezer) -> None:
     # Disabled by default
     assert hass.states.get("sensor.disk_mmcblk1_read_iops") is None
     assert hass.states.get("sensor.system_performance_load_5_min") is None
+    # The sample data is a bad moment: 40 % iowait, 30 % I/O pressure. The
+    # disk's 100 ms write latency and 75 % busy are under the thresholds.
+    assert state("sensor.system_performance_health") == "problem"
+    issue_names = hass.states.get("sensor.system_performance_health").attributes["issues"]
+    assert "CPU iowait (now, problem)" in issue_names
+    assert "I/O pressure (now, problem)" in issue_names
+    assert not any("mmcblk1" in n for n in issue_names)
+    issues = ir.async_get(hass).issues
+    assert (DOMAIN, "health_iowait") in issues
+    assert issues[(DOMAIN, "health_iowait")].severity == ir.IssueSeverity.ERROR
 
     assert await hass.config_entries.async_unload(entry.entry_id)
+    assert not [k for k in ir.async_get(hass).issues if k[0] == DOMAIN]
 
 
 async def test_config_flow(hass: HomeAssistant) -> None:
@@ -156,4 +168,5 @@ async def test_config_flow(hass: HomeAssistant) -> None:
         CONF_DISKS: ["mmcblk1"],
         CONF_INTERFACES: ["end0"],
         CONF_SCAN_INTERVAL: 20,
+        "repairs": True,
     }

@@ -30,6 +30,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiskWaitConfigEntry) -> 
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(coordinator.async_clear_repairs)
+    entry.async_create_background_task(
+        hass, coordinator.async_seed_trends(), "disk_wait seed trends"
+    )
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     return True
 

@@ -7,12 +7,14 @@
         "data": {
           "disks": "Disks",
           "scan_interval": "Poll interval",
-          "interfaces": "Network interfaces"
+          "interfaces": "Network interfaces",
+          "repairs": "Raise Repairs for problems"
         },
         "data_description": {
           "disks": "Disks to report throughput, busy % and latency for.",
           "interfaces": "Interfaces to report traffic for. Leave empty for none.",
-          "scan_interval": "Rates are averaged over the whole interval, so a longer interval only lowers resolution and means fewer recorder writes."
+          "scan_interval": "Rates are averaged over the whole interval, so a longer interval only lowers resolution and means fewer recorder writes.",
+          "repairs": "Show values that are bad now, or heading somewhere bad, under Settings → Repairs. The Health sensor works either way."
         }
       }
     },
@@ -31,12 +33,14 @@
         "data": {
           "disks": "Disks",
           "scan_interval": "Poll interval",
-          "interfaces": "Network interfaces"
+          "interfaces": "Network interfaces",
+          "repairs": "Raise Repairs for problems"
         },
         "data_description": {
           "disks": "Disks to report throughput, busy % and latency for.",
           "interfaces": "Interfaces to report traffic for. Leave empty for none.",
-          "scan_interval": "Rates are averaged over the whole interval, so a longer interval only lowers resolution and means fewer recorder writes."
+          "scan_interval": "Rates are averaged over the whole interval, so a longer interval only lowers resolution and means fewer recorder writes.",
+          "repairs": "Show values that are bad now, or heading somewhere bad, under Settings → Repairs. The Health sensor works either way."
         }
       }
     },
@@ -144,6 +148,14 @@
       },
       "tx": {
         "name": "Upload"
+      },
+      "health": {
+        "name": "Health",
+        "state": {
+          "ok": "OK",
+          "warning": "Warning",
+          "problem": "Problem"
+        }
       }
     },
     "button": {
@@ -187,6 +199,16 @@
           "description": "Also post the report as a notification."
         }
       }
+    }
+  },
+  "issues": {
+    "now": {
+      "title": "{name} needs attention",
+      "description": "{summary}\n\n{hint}\n\nThis clears by itself once the value has been back under the threshold for a few minutes."
+    },
+    "trend": {
+      "title": "{name} is heading for trouble",
+      "description": "{summary}\n\n{hint}\n\nThis is a forecast from the last few days of readings, and it clears by itself if the trend levels off."
     }
   }
 }

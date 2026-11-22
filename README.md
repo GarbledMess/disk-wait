@@ -40,6 +40,45 @@ Built for HA OS on a Home Assistant Green, but it works on any Linux install.
 
 Sensors that are off by default can be enabled from the entity's settings. Pressure sensors only appear if the kernel exposes PSI (HA OS does).
 
+## Problem highlighting
+
+Disk Wait flags values that are bad **now**, and values that are **heading somewhere bad**:
+
+- a **Health** sensor (`OK`, `Warning` or `Problem`) on the *System performance* device, with an `issues` attribute naming what is firing. You can use it for a dashboard badge, a conditional card or an automation;
+- an entry under **Settings → Repairs** for each problem, with the value, the threshold, and what to check next. Turn this off under **Configure** if you only want the sensor.
+
+Both clear by themselves when the value recovers.
+
+**Now** checks use a value smoothed over about 5 minutes, so one bad poll doesn't raise anything. Once raised, a check only clears below 90 % of its threshold, so it doesn't flap.
+
+| Check | Warning | Problem |
+|---|--:|--:|
+| Event loop lag | 100 ms | 500 ms |
+| I/O pressure | 10 % | 25 % |
+| Memory pressure | 5 % | 20 % |
+| CPU pressure | 30 % | 60 % |
+| CPU iowait | 20 % | 40 % |
+| CPU usage | 85 % | 95 % |
+| Memory used | 85 % | 95 % |
+| Swap used | 50 % | 80 % |
+| Data disk used | 85 % | 95 % |
+| CPU temperature | 75 °C | 85 °C |
+| Disk busy (per disk) | 80 % | 95 % |
+| Disk write latency (per disk) | 200 ms | 1000 ms |
+| Disk read latency (per disk) | 100 ms | 500 ms |
+
+**Coming up** checks fit a straight line through up to 3 days of readings, once every 5 minutes. They only fire when there are at least 6 hours of history and the line fits well, so noise and one-off jumps are ignored. On start-up the history is reloaded from the recorder's hourly statistics, so a restart doesn't reset it.
+
+| Forecast | Warning | Problem |
+|---|---|---|
+| Data disk reaches 95 % | within 14 days | within 3 days |
+| Memory reaches 95 % | within 2 days | within 6 hours |
+| Swap reaches 90 % | within 2 days | within 6 hours |
+| Home Assistant memory keeps growing | over 150 MiB a day | |
+| Recorder database keeps growing | over 100 MiB a day | |
+
+Cost: about 20 µs per poll, plus under 1 ms for the trend fits every 5 minutes. The Health sensor and Repairs only change when a check starts, stops or changes level, so they add almost nothing to the recorder.
+
 ## On-demand reports
 
 Two buttons on the *System performance* device, also available as actions. They're the heavy checks, so they never run on a timer, only when you press one, call the action, or write your own automation. Results appear as a notification, and the actions also return them as response data.

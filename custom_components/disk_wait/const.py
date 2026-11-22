@@ -5,6 +5,7 @@ DOMAIN = "disk_wait"
 CONF_DISKS = "disks"
 CONF_INTERFACES = "interfaces"
 CONF_SCAN_INTERVAL = "scan_interval"
+CONF_REPAIRS = "repairs"
 
 # Rates are averaged over the whole interval from cumulative kernel counters,
 # so a longer interval loses resolution but never misses activity.

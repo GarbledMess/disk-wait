@@ -19,6 +19,7 @@ from . import proc
 from .const import (
     CONF_DISKS,
     CONF_INTERFACES,
+    CONF_REPAIRS,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -48,6 +49,7 @@ def _schema(
     nets: list[str],
     default_nets: list[str],
     interval: int,
+    repairs: bool = True,
 ) -> vol.Schema:
     return vol.Schema(
         {
@@ -62,6 +64,7 @@ def _schema(
                     mode=selector.NumberSelectorMode.BOX,
                 )
             ),
+            vol.Required(CONF_REPAIRS, default=repairs): selector.BooleanSelector(),
         }
     )
 
@@ -71,6 +74,7 @@ def _clean(user_input: dict[str, Any]) -> dict[str, Any]:
         CONF_DISKS: [d.strip() for d in user_input[CONF_DISKS] if d.strip()],
         CONF_INTERFACES: [n.strip() for n in user_input.get(CONF_INTERFACES, []) if n.strip()],
         CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL]),
+        CONF_REPAIRS: bool(user_input.get(CONF_REPAIRS, True)),
     }
 
 
@@ -131,6 +135,7 @@ class DiskWaitOptionsFlow(OptionsFlow):
                 sorted(set(nets) | set(chosen_nets)),
                 chosen_nets,
                 current.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
+                current.get(CONF_REPAIRS, True),
             ),
             errors=errors,
             description_placeholders={"data_disk": data_disk or "unknown"},

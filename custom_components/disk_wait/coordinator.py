@@ -6,15 +6,20 @@ from datetime import timedelta
 import asyncio
 import logging
 import os
+import time
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er, issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from . import proc
+from .health import PROBLEM, TREND_RULES, Finding, HealthMonitor
 from .const import (
     CONF_DISKS,
     CONF_INTERFACES,
+    CONF_REPAIRS,
     CONF_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -49,6 +54,10 @@ class DiskWaitCoordinator(DataUpdateCoordinator[proc.Metrics]):
         self._probe: asyncio.TimerHandle | None = None
         self._probe_due = 0.0
         self._max_lag = 0.0
+        self.health = HealthMonitor(interval)
+        self.findings: dict[str, Finding] = {}
+        self._repairs = bool(opts.get(CONF_REPAIRS, True))
+        self._raised: dict[str, str] = {}  # issue id -> level currently in Repairs
 
     async def async_prime(self) -> None:
         """Work out once what to read, so polls do no discovery."""
@@ -113,4 +122,100 @@ class DiskWaitCoordinator(DataUpdateCoordinator[proc.Metrics]):
             metrics = proc.compute(old, snap)
         metrics.system["loop_lag"] = round(self._max_lag * 1000)
         self._max_lag = 0.0
+        self._check_health(metrics, slow)
         return metrics
+
+    # -------------------------------------------------- health
+
+    def _check_health(self, metrics: proc.Metrics, slow: bool) -> None:
+        """A few dozen comparisons per poll; trend fits only on slow ticks."""
+        if slow:
+            now = time.time()
+            for rule in TREND_RULES:
+                self.health.add_sample(rule.key, now, metrics.system.get(rule.key))
+        disks = {
+            name: {
+                "busy": d.busy_pct,
+                "write_latency": d.write_latency_ms,
+                "read_latency": d.read_latency_ms,
+            }
+            for name, d in metrics.disks.items()
+        }
+        self.findings = self.health.evaluate(metrics.system, disks, trends=slow)
+        if self._repairs:
+            self._sync_repairs()
+
+    @callback
+    def _sync_repairs(self) -> None:
+        """Create, update or delete Repairs issues only when a finding changes level."""
+        wanted = {f"health_{f.id}": f for f in self.findings.values()}
+        for issue_id in list(self._raised):
+            if issue_id not in wanted:
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+                del self._raised[issue_id]
+        for issue_id, f in wanted.items():
+            if self._raised.get(issue_id) == f.level:
+                continue  # unchanged: don't touch the registry (it saves to disk)
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                issue_id,
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR if f.level == PROBLEM else ir.IssueSeverity.WARNING,
+                translation_key="trend" if f.kind == "trend" else "now",
+                translation_placeholders={"name": f.name, "summary": f.summary, "hint": f.hint},
+            )
+            self._raised[issue_id] = f.level
+
+    @callback
+    def async_clear_repairs(self) -> None:
+        """Remove every issue this integration raised (on unload)."""
+        registry = ir.async_get(self.hass)
+        for (domain, issue_id) in list(registry.issues):
+            if domain == DOMAIN and issue_id.startswith("health_"):
+                ir.async_delete_issue(self.hass, DOMAIN, issue_id)
+        self._raised.clear()
+
+    async def async_seed_trends(self) -> None:
+        """Load up to 3 days of hourly means from the recorder, so trends survive restarts.
+
+        One read-only statistics query, once at start-up.
+        """
+        if "recorder" not in self.hass.config.components:
+            return
+        from homeassistant.components.recorder.statistics import (  # noqa: PLC0415
+            statistics_during_period,
+        )
+        from homeassistant.helpers.recorder import get_instance  # noqa: PLC0415
+
+        registry = er.async_get(self.hass)
+        entry_id = self.config_entry.entry_id
+        ids: dict[str, str] = {}
+        for rule in TREND_RULES:
+            if entity_id := registry.async_get_entity_id(
+                "sensor", DOMAIN, f"{entry_id}_{rule.key}"
+            ):
+                ids[entity_id] = rule.key
+        if not ids:
+            return
+        start = dt_util.utcnow() - timedelta(days=3)
+        try:
+            stats = await get_instance(self.hass).async_add_executor_job(
+                statistics_during_period,
+                self.hass,
+                start,
+                None,
+                set(ids),
+                "hour",
+                None,
+                {"mean"},
+            )
+        except Exception:  # noqa: BLE001 - history is optional
+            _LOGGER.debug("Could not load statistics for trend seeding", exc_info=True)
+            return
+        for entity_id, rows in stats.items():
+            self.health.seed(
+                ids[entity_id],
+                # Hourly means are stamped at the hour's start; use its middle.
+                [(row["start"] + 1800, row["mean"]) for row in rows if row.get("mean") is not None],
+            )

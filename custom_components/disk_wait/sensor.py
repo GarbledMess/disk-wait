@@ -32,6 +32,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DiskWaitConfigEntry
 from .const import DOMAIN
 from .coordinator import DiskWaitCoordinator
+from .health import OK, PROBLEM, WARNING, HealthMonitor
 
 PARALLEL_UPDATES = 0
 
@@ -226,7 +227,8 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     c = entry.runtime_data
-    entities: list[SensorEntity] = [
+    entities: list[SensorEntity] = [HealthEntity(c)]
+    entities += [
         SystemEntity(c, desc) for desc in SYSTEM_SENSORS if desc.available_if(c)
     ]
     entities += [
@@ -293,3 +295,34 @@ class ItemEntity(_Base):
     def native_value(self) -> float | int | None:
         rates = getattr(self.coordinator.data, self._group).get(self._item)
         return None if rates is None else self.entity_description.value(rates)
+
+
+class HealthEntity(_Base):
+    """Overall health: ok, warning or problem, plus which checks are firing.
+
+    The attribute lists only names and levels, not values, so it changes only
+    when a check starts or stops firing, and it is excluded from the recorder.
+    """
+
+    _attr_translation_key = "health"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = [OK, WARNING, PROBLEM]
+    _unrecorded_attributes = frozenset({"issues"})
+
+    def __init__(self, coordinator: DiskWaitCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_health"
+        self._attr_device_info = self._device("system", "System performance")
+
+    @property
+    def native_value(self) -> str:
+        return HealthMonitor.overall(self.coordinator.findings)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "issues": [
+                f"{f.name} ({'coming up' if f.kind == 'trend' else 'now'}, {f.level})"
+                for f in sorted(self.coordinator.findings.values(), key=lambda f: f.id)
+            ]
+        }
