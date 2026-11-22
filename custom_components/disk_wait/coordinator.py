@@ -15,7 +15,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from . import proc
-from .health import PROBLEM, TREND_RULES, Finding, HealthMonitor
+from .health import LOAD_SENSITIVE, PROBLEM, TREND_RULES, Finding, HealthMonitor
 from .const import (
     CONF_DISKS,
     CONF_INTERFACES,
@@ -24,7 +24,9 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     LOOP_PROBE_INTERVAL,
+    REPORT_GRACE,
     SLOW_INTERVAL,
+    STARTUP_GRACE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -58,6 +60,28 @@ class DiskWaitCoordinator(DataUpdateCoordinator[proc.Metrics]):
         self.findings: dict[str, Finding] = {}
         self._repairs = bool(opts.get(CONF_REPAIRS, True))
         self._raised: dict[str, str] = {}  # issue id -> level currently in Repairs
+        # Load-sensitive checks are paused until this monotonic time.
+        self._quiet_until = time.monotonic() + STARTUP_GRACE
+        self._reports_running = 0
+
+    @callback
+    def async_hass_started(self, _hass: HomeAssistant | None = None) -> None:
+        """Start-up is heavy on a slow card; give it a grace period once it finishes."""
+        self._quiet_until = max(self._quiet_until, time.monotonic() + STARTUP_GRACE)
+
+    @callback
+    def async_report_started(self) -> None:
+        self._reports_running += 1
+
+    @callback
+    def async_report_finished(self) -> None:
+        """Our own reports load the disk; keep checks paused a little after."""
+        self._reports_running = max(0, self._reports_running - 1)
+        self._quiet_until = max(self._quiet_until, time.monotonic() + REPORT_GRACE)
+
+    @property
+    def quiet(self) -> bool:
+        return self._reports_running > 0 or time.monotonic() < self._quiet_until
 
     async def async_prime(self) -> None:
         """Work out once what to read, so polls do no discovery."""
@@ -133,7 +157,7 @@ class DiskWaitCoordinator(DataUpdateCoordinator[proc.Metrics]):
             now = time.time()
             for rule in TREND_RULES:
                 self.health.add_sample(rule.key, now, metrics.system.get(rule.key))
-        disks = {
+        disks: dict[str, dict[str, float | None]] = {
             name: {
                 "busy": d.busy_pct,
                 "write_latency": d.write_latency_ms,
@@ -141,7 +165,13 @@ class DiskWaitCoordinator(DataUpdateCoordinator[proc.Metrics]):
             }
             for name, d in metrics.disks.items()
         }
-        self.findings = self.health.evaluate(metrics.system, disks, trends=slow)
+        system = metrics.system
+        if self.quiet:
+            # Feeding nothing for these keeps their current state unchanged:
+            # nothing new is raised and nothing already raised is cleared.
+            system = {k: v for k, v in system.items() if k not in LOAD_SENSITIVE}
+            disks = {name: {} for name in disks}
+        self.findings = self.health.evaluate(system, disks, trends=slow)
         if self._repairs:
             self._sync_repairs()
 

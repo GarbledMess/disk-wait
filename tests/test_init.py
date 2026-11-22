@@ -133,8 +133,18 @@ async def test_setup_and_rates(hass: HomeAssistant, freezer) -> None:
     # Disabled by default
     assert hass.states.get("sensor.disk_mmcblk1_read_iops") is None
     assert hass.states.get("sensor.system_performance_load_5_min") is None
-    # The sample data is a bad moment: 40 % iowait, 30 % I/O pressure. The
-    # disk's 100 ms write latency and 75 % busy are under the thresholds.
+    # Just started: load-sensitive checks are in their grace period.
+    c = entry.runtime_data
+    assert c.quiet
+    assert state("sensor.system_performance_health") == "ok"
+
+    # After the grace period the same readings are a problem: 40 % iowait and
+    # 30 % I/O pressure. The disk's 100 ms write latency and 75 % busy are fine.
+    c._quiet_until = 0
+    for _ in range(10):  # a full smoothing window at a 30 s interval
+        c._check_health(c.data, False)
+    c.async_update_listeners()
+    await hass.async_block_till_done()
     assert state("sensor.system_performance_health") == "problem"
     issue_names = hass.states.get("sensor.system_performance_health").attributes["issues"]
     assert "CPU iowait (now, problem)" in issue_names
@@ -143,6 +153,14 @@ async def test_setup_and_rates(hass: HomeAssistant, freezer) -> None:
     issues = ir.async_get(hass).issues
     assert (DOMAIN, "health_iowait") in issues
     assert issues[(DOMAIN, "health_iowait")].severity == ir.IssueSeverity.ERROR
+
+    # Running one of our own reports pauses the checks again; findings are held.
+    c.async_report_started()
+    assert c.quiet
+    c._check_health(c.data, False)
+    assert "iowait" in c.findings
+    c.async_report_finished()
+    assert c.quiet  # short grace after the report
 
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert not [k for k in ir.async_get(hass).issues if k[0] == DOMAIN]

@@ -18,3 +18,9 @@ SLOW_INTERVAL = 300  # seconds
 
 # How often the event-loop lag probe wakes. Each wake is one timer callback.
 LOOP_PROBE_INTERVAL = 5.0  # seconds
+
+# Load-sensitive health checks (loop lag, pressure, disk busy/latency) are
+# paused for this long after Home Assistant finishes starting, and after one
+# of Disk Wait's own reports finishes, so they don't flag our own load.
+STARTUP_GRACE = 600  # seconds
+REPORT_GRACE = 120  # seconds

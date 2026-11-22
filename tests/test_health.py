@@ -24,9 +24,10 @@ def run(mon, system, disks=None, n=1, trends=False):
 
 def test_single_spike_is_smoothed():
     mon = health.HealthMonitor(interval=60)
-    run(mon, {"loop_lag": 5}, n=10)
-    assert run(mon, {"loop_lag": 400}) == {}  # one bad minute: EMA ~84 ms
-    found = run(mon, {"loop_lag": 400}, n=5)
+    run(mon, {"loop_lag": 5}, n=10)  # past warm-up
+    assert run(mon, {"loop_lag": 400}) == {}  # one bad minute: median still 5 ms
+    assert run(mon, {"loop_lag": 400}) == {}  # two of five
+    found = run(mon, {"loop_lag": 400})  # most of the window is bad
     assert found["loop_lag"].level == health.WARNING
 
 
@@ -101,3 +102,12 @@ def test_overall():
 def test_fit():
     slope, intercept, r2, span = health.fit([(0, 1), (10, 2), (20, 3)])
     assert abs(slope - 0.1) < 1e-9 and abs(intercept - 1) < 1e-9 and r2 > 0.999 and span == 20
+
+
+def test_first_sample_cannot_raise_alone():
+    mon = health.HealthMonitor(interval=60)  # warm-up = 5 samples
+    assert run(mon, {"loop_lag": 3000}) == {}  # e.g. start-up lag in the first poll
+    assert run(mon, {"loop_lag": 3}, n=3) == {}
+    # Window full: the one huge value is outvoted by four normal ones.
+    assert run(mon, {"loop_lag": 3}) == {}
+    assert run(mon, {"loop_lag": 3000}, n=2) == {}

@@ -3,9 +3,10 @@
 Pure Python, no Home Assistant imports. Every check is a handful of float
 operations per poll; trend fits run once per slow tick (every 5 minutes).
 
-*Now* checks compare a smoothed value (exponential moving average, about a
-5-minute time constant) against warning and problem thresholds, so a single
-spike doesn't raise anything. They clear with hysteresis, at 90 % of the
+*Now* checks compare the median of the last 5 minutes of readings against
+warning and problem thresholds, so a value has to be bad for most of that
+window to raise anything: a single spike, such as one long stall while
+Home Assistant starts, can't do it on its own. They clear with hysteresis, at 90 % of the
 threshold, so a value hovering at the line doesn't flap.
 
 *Trend* checks fit a straight line through the recent history of slow-moving
@@ -34,6 +35,23 @@ MIN_SPAN_SECONDS = 6 * 3600  # need this much history before predicting
 MIN_POINTS = 12
 MIN_R2 = 0.6  # how well a line must fit before we believe it
 DAY = 86400.0
+
+
+# Checks that Disk Wait's own heavy work (a storage or recorder report) and
+# Home Assistant's start-up legitimately push up; paused at those times.
+LOAD_SENSITIVE = frozenset(
+    {
+        "loop_lag",
+        "io_pressure_some",
+        "memory_pressure_some",
+        "cpu_pressure_some",
+        "iowait",
+        "cpu",
+        "busy",
+        "write_latency",
+        "read_latency",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,8 +178,8 @@ class HealthMonitor:
     """Keeps smoothed values, trend history and the current findings."""
 
     def __init__(self, interval: float) -> None:
-        self._alpha = min(1.0, interval / SMOOTHING_SECONDS)
-        self._ema: dict[str, float] = {}
+        self._window = max(1, math.ceil(SMOOTHING_SECONDS / interval))
+        self._recent: dict[str, deque[float]] = {}
         self._active: dict[str, Finding] = {}
         self._history: dict[str, deque[tuple[float, float]]] = {
             r.key: deque() for r in TREND_RULES
@@ -188,11 +206,15 @@ class HealthMonitor:
 
     # ------------------------------------------------------------ checks
 
-    def _smooth(self, key: str, value: float) -> float:
-        prev = self._ema.get(key)
-        cur = value if prev is None else prev + self._alpha * (value - prev)
-        self._ema[key] = cur
-        return cur
+    def _smooth(self, key: str, value: float) -> float | None:
+        """Median of the last window of readings, or None until the window is full."""
+        recent = self._recent.get(key)
+        if recent is None:
+            recent = self._recent[key] = deque(maxlen=self._window)
+        recent.append(value)
+        if len(recent) < self._window:
+            return None
+        return sorted(recent)[len(recent) // 2]
 
     def _now(self, fid: str, rule: NowRule, label: str, value: float | None) -> Finding | None:
         if value is None:
@@ -200,6 +222,8 @@ class HealthMonitor:
             return self._active.get(fid)
         v = self._smooth(fid, value)
         was = self._active.get(fid)
+        if v is None:
+            return was
         # Hysteresis: once raised, a level only clears below 90 % of its threshold.
         hi = rule.problem * (CLEAR_RATIO if was and was.level == PROBLEM else 1.0)
         lo = rule.warning * (CLEAR_RATIO if was else 1.0)
@@ -280,7 +304,7 @@ class HealthMonitor:
         """Run the checks. ``trends`` is true on slow ticks only."""
         found: dict[str, Finding] = {}
         for rule in SYSTEM_RULES:
-            if rule.key in system or rule.key in self._ema:
+            if rule.key in system or rule.key in self._recent:
                 if f := self._now(rule.key, rule, rule.name, system.get(rule.key)):
                     found[f.id] = f
         for disk, values in disks.items():

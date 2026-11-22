@@ -49,7 +49,7 @@ Disk Wait flags values that are bad **now**, and values that are **heading somew
 
 Both clear by themselves when the value recovers.
 
-**Now** checks use a value smoothed over about 5 minutes, so one bad poll doesn't raise anything. Once raised, a check only clears below 90 % of its threshold, so it doesn't flap.
+**Now** checks use the median of the last 5 minutes of readings, so a value has to be bad for most of that window, and one long stall can't raise anything. Once raised, a check only clears below 90 % of its threshold, so it doesn't flap. Checks that load naturally pushes up (loop lag, pressure, iowait, CPU, disk busy and latency) are paused for 10 minutes after Home Assistant starts, and while one of Disk Wait's own reports runs plus 2 minutes after. Anything already raised is held during the pause rather than cleared. The sensors themselves keep recording the real values.
 
 | Check | Warning | Problem |
 |---|--:|--:|

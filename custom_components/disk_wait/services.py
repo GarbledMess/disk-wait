@@ -37,13 +37,24 @@ _STORAGE_SCHEMA = vol.Schema(
 
 
 async def _exclusive(hass: HomeAssistant, coro: Any) -> Any:
-    """Run one report at a time; a second press while one runs is refused."""
+    """Run one report at a time; a second press while one runs is refused.
+
+    While a report runs, and briefly after, load-sensitive health checks are
+    paused so Disk Wait doesn't flag the load it is causing itself.
+    """
     lock = hass.data.setdefault(_LOCK, asyncio.Lock())
     if lock.locked():
         coro.close()
         raise HomeAssistantError("A Disk Wait report is already running")
+    coordinators = [e.runtime_data for e in hass.config_entries.async_loaded_entries(DOMAIN)]
     async with lock:
-        return await coro
+        for c in coordinators:
+            c.async_report_started()
+        try:
+            return await coro
+        finally:
+            for c in coordinators:
+                c.async_report_finished()
 
 
 async def run_recorder_report(

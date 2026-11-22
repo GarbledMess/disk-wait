@@ -6,6 +6,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
 
 from . import services
@@ -31,6 +32,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiskWaitConfigEntry) -> 
     entry.runtime_data = coordinator
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(coordinator.async_clear_repairs)
+    entry.async_on_unload(async_at_started(hass, coordinator.async_hass_started))
     entry.async_create_background_task(
         hass, coordinator.async_seed_trends(), "disk_wait seed trends"
     )
