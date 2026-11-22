@@ -1,4 +1,4 @@
-"""Pure /proc readers and rate maths for Disk Wait.
+"""Pure /proc readers and rate maths for Host Vitals.
 
 No Home Assistant imports here, so this module can be unit tested on its own.
 Everything that touches files is blocking and must run in an executor.

@@ -1,4 +1,4 @@
-"""Disk Wait: lightweight system performance sensors read straight from /proc."""
+"""Host Vitals: lightweight system performance sensors read straight from /proc."""
 
 from __future__ import annotations
 
@@ -11,12 +11,12 @@ from homeassistant.helpers.typing import ConfigType
 
 from . import services
 from .const import DOMAIN
-from .coordinator import DiskWaitCoordinator
+from .coordinator import HostVitalsCoordinator
 
 PLATFORMS = [Platform.BUTTON, Platform.SENSOR]
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
-type DiskWaitConfigEntry = ConfigEntry[DiskWaitCoordinator]
+type HostVitalsConfigEntry = ConfigEntry[HostVitalsCoordinator]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
@@ -24,8 +24,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: DiskWaitConfigEntry) -> bool:
-    coordinator = DiskWaitCoordinator(hass, entry)
+async def async_setup_entry(hass: HomeAssistant, entry: HostVitalsConfigEntry) -> bool:
+    coordinator = HostVitalsCoordinator(hass, entry)
     await coordinator.async_prime()
     entry.async_on_unload(coordinator.async_stop_probe)
     await coordinator.async_config_entry_first_refresh()
@@ -34,15 +34,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: DiskWaitConfigEntry) -> 
     entry.async_on_unload(coordinator.async_clear_repairs)
     entry.async_on_unload(async_at_started(hass, coordinator.async_hass_started))
     entry.async_create_background_task(
-        hass, coordinator.async_seed_trends(), "disk_wait seed trends"
+        hass, coordinator.async_seed_trends(), "host_vitals seed trends"
     )
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     return True
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: DiskWaitConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: HostVitalsConfigEntry) -> bool:
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
 
-async def _async_reload(hass: HomeAssistant, entry: DiskWaitConfigEntry) -> None:
+async def _async_reload(hass: HomeAssistant, entry: HostVitalsConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)

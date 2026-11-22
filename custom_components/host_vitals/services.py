@@ -40,12 +40,12 @@ async def _exclusive(hass: HomeAssistant, coro: Any) -> Any:
     """Run one report at a time; a second press while one runs is refused.
 
     While a report runs, and briefly after, load-sensitive health checks are
-    paused so Disk Wait doesn't flag the load it is causing itself.
+    paused so Host Vitals doesn't flag the load it is causing itself.
     """
     lock = hass.data.setdefault(_LOCK, asyncio.Lock())
     if lock.locked():
         coro.close()
-        raise HomeAssistantError("A Disk Wait report is already running")
+        raise HomeAssistantError("A Host Vitals report is already running")
     coordinators = [e.runtime_data for e in hass.config_entries.async_loaded_entries(DOMAIN)]
     async with lock:
         for c in coordinators:
@@ -65,7 +65,7 @@ async def run_recorder_report(
         persistent_notification.async_create(
             hass,
             reports.recorder_markdown(result),
-            title="Disk Wait: recorder report",
+            title="Host Vitals: recorder report",
             notification_id=f"{DOMAIN}_recorder_report",
         )
     return result
@@ -79,7 +79,7 @@ async def run_storage_report(
             hass,
             "Measuring the data disk. On a microSD card this can take a few minutes; "
             "this notification will be replaced with the report.",
-            title="Disk Wait: storage report",
+            title="Host Vitals: storage report",
             notification_id=f"{DOMAIN}_storage_report",
         )
     result = await _exclusive(hass, reports.storage_report(hass, limit))
@@ -87,7 +87,7 @@ async def run_storage_report(
         persistent_notification.async_create(
             hass,
             reports.storage_markdown(result),
-            title="Disk Wait: storage report",
+            title="Host Vitals: storage report",
             notification_id=f"{DOMAIN}_storage_report",
         )
     return result

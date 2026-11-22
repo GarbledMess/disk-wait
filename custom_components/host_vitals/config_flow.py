@@ -78,7 +78,7 @@ def _clean(user_input: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-class DiskWaitConfigFlow(ConfigFlow, domain=DOMAIN):
+class HostVitalsConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     async def async_step_user(
@@ -91,7 +91,7 @@ class DiskWaitConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             data = _clean(user_input)
             if data[CONF_DISKS]:
-                return self.async_create_entry(title="Disk Wait", data=data)
+                return self.async_create_entry(title="Host Vitals", data=data)
             errors[CONF_DISKS] = "no_disks"
         default = [data_disk] if data_disk else disks[:1]
         return self.async_show_form(
@@ -110,10 +110,10 @@ class DiskWaitConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(entry: ConfigEntry) -> OptionsFlow:
-        return DiskWaitOptionsFlow()
+        return HostVitalsOptionsFlow()
 
 
-class DiskWaitOptionsFlow(OptionsFlow):
+class HostVitalsOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:

@@ -32,7 +32,7 @@ from .const import (
 _LOGGER = logging.getLogger(__name__)
 
 
-class DiskWaitCoordinator(DataUpdateCoordinator[proc.Metrics]):
+class HostVitalsCoordinator(DataUpdateCoordinator[proc.Metrics]):
     """Keeps the previous snapshot and turns counter deltas into rates."""
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:

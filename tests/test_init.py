@@ -12,8 +12,8 @@ from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
 )
 
-from custom_components.disk_wait import proc
-from custom_components.disk_wait.const import (
+from custom_components.host_vitals import proc
+from custom_components.host_vitals.const import (
     CONF_DISKS,
     CONF_INTERFACES,
     CONF_SCAN_INTERVAL,
@@ -175,7 +175,7 @@ async def test_config_flow(hass: HomeAssistant) -> None:
         patch.object(proc, "find_data_disk", return_value="mmcblk1"),
         patch.object(proc, "list_nets", return_value=["end0"]),
         patch.object(proc, "default_net", return_value="end0"),
-        patch("custom_components.disk_wait.async_setup_entry", return_value=True),
+        patch("custom_components.host_vitals.async_setup_entry", return_value=True),
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": "user"}

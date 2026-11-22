@@ -8,8 +8,8 @@ from pytest_homeassistant_custom_component.components.recorder.common import (
     async_wait_recording_done,
 )
 
-from custom_components.disk_wait import reports
-from custom_components.disk_wait.const import DOMAIN
+from custom_components.host_vitals import reports
+from custom_components.host_vitals.const import DOMAIN
 
 
 @pytest.fixture(autouse=True)

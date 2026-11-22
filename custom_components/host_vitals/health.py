@@ -37,7 +37,7 @@ MIN_R2 = 0.6  # how well a line must fit before we believe it
 DAY = 86400.0
 
 
-# Checks that Disk Wait's own heavy work (a storage or recorder report) and
+# Checks that Host Vitals's own heavy work (a storage or recorder report) and
 # Home Assistant's start-up legitimately push up; paused at those times.
 LOAD_SENSITIVE = frozenset(
     {

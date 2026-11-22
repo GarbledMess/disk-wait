@@ -1,6 +1,6 @@
-"""Constants for Disk Wait."""
+"""Constants for Host Vitals."""
 
-DOMAIN = "disk_wait"
+DOMAIN = "host_vitals"
 
 CONF_DISKS = "disks"
 CONF_INTERFACES = "interfaces"
@@ -21,6 +21,6 @@ LOOP_PROBE_INTERVAL = 5.0  # seconds
 
 # Load-sensitive health checks (loop lag, pressure, disk busy/latency) are
 # paused for this long after Home Assistant finishes starting, and after one
-# of Disk Wait's own reports finishes, so they don't flag our own load.
+# of Host Vitals's own reports finishes, so they don't flag our own load.
 STARTUP_GRACE = 600  # seconds
 REPORT_GRACE = 120  # seconds

@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from . import DiskWaitConfigEntry
+from . import HostVitalsConfigEntry
 from .const import DOMAIN
 from .services import run_recorder_report, run_storage_report
 
@@ -45,7 +45,7 @@ BUTTONS = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: DiskWaitConfigEntry,
+    entry: HostVitalsConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     async_add_entities(
@@ -57,7 +57,7 @@ class ReportEntity(ButtonEntity):
     _attr_has_entity_name = True
     entity_description: ReportButton
 
-    def __init__(self, entry: DiskWaitConfigEntry, desc: ReportButton) -> None:
+    def __init__(self, entry: HostVitalsConfigEntry, desc: ReportButton) -> None:
         self.entity_description = desc
         self._attr_unique_id = f"{entry.entry_id}_{desc.key}"
         self._attr_device_info = DeviceInfo(

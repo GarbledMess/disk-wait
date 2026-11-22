@@ -8,8 +8,8 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 
-from custom_components.disk_wait import reports
-from custom_components.disk_wait.const import DOMAIN
+from custom_components.host_vitals import reports
+from custom_components.host_vitals.const import DOMAIN
 
 
 @pytest.fixture(autouse=True)

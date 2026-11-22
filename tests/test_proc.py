@@ -6,7 +6,7 @@ import sys
 
 _spec = importlib.util.spec_from_file_location(
     "dw_proc",
-    pathlib.Path(__file__).parents[1] / "custom_components/disk_wait/proc.py",
+    pathlib.Path(__file__).parents[1] / "custom_components/host_vitals/proc.py",
 )
 proc = importlib.util.module_from_spec(_spec)
 sys.modules["dw_proc"] = proc

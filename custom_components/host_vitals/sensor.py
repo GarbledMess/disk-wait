@@ -1,4 +1,4 @@
-"""Sensors for Disk Wait.
+"""Sensors for Host Vitals.
 
 No sensor has extra state attributes, so each update is at most one small
 recorder row, and only when the rounded value actually changes.
@@ -29,9 +29,9 @@ from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import DiskWaitConfigEntry
+from . import HostVitalsConfigEntry
 from .const import DOMAIN
-from .coordinator import DiskWaitCoordinator
+from .coordinator import HostVitalsCoordinator
 from .health import OK, PROBLEM, WARNING, HealthMonitor
 
 PARALLEL_UPDATES = 0
@@ -43,7 +43,7 @@ M = SensorStateClass.MEASUREMENT
 class SystemSensor(SensorEntityDescription):
     """A machine-wide value, looked up by ``key`` in Metrics.system."""
 
-    available_if: Callable[[DiskWaitCoordinator], bool] = lambda c: True
+    available_if: Callable[[HostVitalsCoordinator], bool] = lambda c: True
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -223,7 +223,7 @@ NET_SENSORS = (
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: DiskWaitConfigEntry,
+    entry: HostVitalsConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     c = entry.runtime_data
@@ -244,7 +244,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class _Base(CoordinatorEntity[DiskWaitCoordinator], SensorEntity):
+class _Base(CoordinatorEntity[HostVitalsCoordinator], SensorEntity):
     _attr_has_entity_name = True
 
     def _device(self, ident: str, name: str) -> DeviceInfo:
@@ -259,7 +259,7 @@ class _Base(CoordinatorEntity[DiskWaitCoordinator], SensorEntity):
 class SystemEntity(_Base):
     entity_description: SystemSensor
 
-    def __init__(self, coordinator: DiskWaitCoordinator, desc: SystemSensor) -> None:
+    def __init__(self, coordinator: HostVitalsCoordinator, desc: SystemSensor) -> None:
         super().__init__(coordinator)
         self.entity_description = desc
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_{desc.key}"
@@ -275,7 +275,7 @@ class ItemEntity(_Base):
 
     def __init__(
         self,
-        coordinator: DiskWaitCoordinator,
+        coordinator: HostVitalsCoordinator,
         desc: ItemSensor,
         group: str,
         item: str,
@@ -309,7 +309,7 @@ class HealthEntity(_Base):
     _attr_options = [OK, WARNING, PROBLEM]
     _unrecorded_attributes = frozenset({"issues"})
 
-    def __init__(self, coordinator: DiskWaitCoordinator) -> None:
+    def __init__(self, coordinator: HostVitalsCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_health"
         self._attr_device_info = self._device("system", "System performance")
@@ -355,7 +355,7 @@ class HealthReasonEntity(_Base):
 
     _attr_translation_key = "health_reason"
 
-    def __init__(self, coordinator: DiskWaitCoordinator) -> None:
+    def __init__(self, coordinator: HostVitalsCoordinator) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}_health_reason"
         self._attr_device_info = self._device("system", "System performance")

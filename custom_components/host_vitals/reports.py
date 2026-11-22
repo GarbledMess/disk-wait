@@ -398,7 +398,7 @@ def storage_markdown(r: dict[str, Any]) -> str:
         "",
         "**System** is everything the Supervisor doesn't attribute: container "
         "images (including old add-on versions), container logs and the systemd "
-        "journal. Home Assistant can't look inside it. See the Disk Wait README "
+        "journal. Home Assistant can't look inside it. See the Host Vitals README "
         "for the SSH commands that break it down.",
     ]
     return "\n".join(lines)

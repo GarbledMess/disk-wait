@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "title": "Disk Wait",
+        "title": "Host Vitals",
         "description": "Choose what to watch. Home Assistant's data looks like it is on **{data_disk}**. On a Home Assistant Green the built-in eMMC is usually mmcblk0 and a microSD card mmcblk1.",
         "data": {
           "disks": "Disks",
@@ -22,13 +22,13 @@
       "no_disks": "Pick at least one disk."
     },
     "abort": {
-      "single_instance_allowed": "Disk Wait is already set up. Use Configure to change disks."
+      "single_instance_allowed": "Host Vitals is already set up. Use Configure to change disks."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Disk Wait",
+        "title": "Host Vitals",
         "description": "Home Assistant's data looks like it is on **{data_disk}**.",
         "data": {
           "disks": "Disks",

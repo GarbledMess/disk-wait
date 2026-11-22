@@ -1,4 +1,4 @@
-# Disk Wait
+# Host Vitals
 
 A tiny Home Assistant integration that records the performance of the machine Home Assistant runs on, with a focus on finding out whether a slow disk is what makes the UI sluggish. It reads a few small kernel files once a minute and records them in the background like any other sensor. No dashboard or browser needs to be open.
 
@@ -42,7 +42,7 @@ Sensors that are off by default can be enabled from the entity's settings. Press
 
 ## Problem highlighting
 
-Disk Wait flags values that are bad **now**, and values that are **heading somewhere bad**:
+Host Vitals flags values that are bad **now**, and values that are **heading somewhere bad**:
 
 - a **Health** sensor (`OK`, `Warning` or `Problem`) on the *System performance* device, for dashboard badges, conditional cards and automations;
 - a **Health reason** sensor whose state says what is wrong, worst first, for example `Problem: Disk mmcblk1 write latency high · Warning: Data disk rising`, or `All clear`;
@@ -50,7 +50,7 @@ Disk Wait flags values that are bad **now**, and values that are **heading somew
 
 Both clear by themselves when the value recovers.
 
-**Now** checks use the median of the last 5 minutes of readings, so a value has to be bad for most of that window, and one long stall can't raise anything. Once raised, a check only clears below 90 % of its threshold, so it doesn't flap. Checks that load naturally pushes up (loop lag, pressure, iowait, CPU, disk busy and latency) are paused for 10 minutes after Home Assistant starts, and while one of Disk Wait's own reports runs plus 2 minutes after. Anything already raised is held during the pause rather than cleared. The sensors themselves keep recording the real values.
+**Now** checks use the median of the last 5 minutes of readings, so a value has to be bad for most of that window, and one long stall can't raise anything. Once raised, a check only clears below 90 % of its threshold, so it doesn't flap. Checks that load naturally pushes up (loop lag, pressure, iowait, CPU, disk busy and latency) are paused for 10 minutes after Home Assistant starts, and while one of Host Vitals's own reports runs plus 2 minutes after. Anything already raised is held during the pause rather than cleared. The sensors themselves keep recording the real values.
 
 | Check | Warning | Problem |
 |---|--:|--:|
@@ -84,23 +84,23 @@ Cost: about 20 µs per poll, plus under 1 ms for the trend fits every 5 minutes.
 
 Two buttons on the *System performance* device, also available as actions. They're the heavy checks, so they never run on a timer, only when you press one, call the action, or write your own automation. Results appear as a notification, and the actions also return them as response data.
 
-**Analyze recorder** (`disk_wait.recorder_report`, options `hours` and `limit`) runs one read-only query against the recorder database and shows:
+**Analyze recorder** (`host_vitals.recorder_report`, options `hours` and `limit`) runs one read-only query against the recorder database and shows:
 - the entities writing the most state rows, with rows per day, share of the total, how often their attributes changed, and a rough size;
 - the same totals grouped by integration, and the busiest event types;
 - a ready-to-paste `recorder: exclude:` snippet for entities above 1,000 rows a day.
 
 On a large SQLite database on a slow card the query can take tens of seconds. It runs in the recorder's own thread, so the UI stays responsive.
 
-**Analyze storage** (`disk_wait.storage_report`, HA OS / Supervised only) asks the Supervisor and shows:
+**Analyze storage** (`host_vitals.storage_report`, HA OS / Supervised only) asks the Supervisor and shows:
 - the data disk breakdown you see under *Settings → System → Storage* (System, App data, Media, Share, Backups, Home Assistant), with the biggest folders in each;
 - each add-on's data size, memory and CPU. Bytes written since start are shown only where the Supervisor reports them: it reads Docker's older cgroup v1 counters, which are always 0 on current HA OS;
 - backups: how many there are, how much space they use on this device, the oldest and newest, and the largest.
 
-The Supervisor measures the disk by walking the whole data partition. On a microSD card that can take minutes, so Disk Wait waits up to 10 minutes and shows a "measuring" notification in the meantime.
+The Supervisor measures the disk by walking the whole data partition. On a microSD card that can take minutes, so Host Vitals waits up to 10 minutes and shows a "measuring" notification in the meantime.
 
 ### What's in "System"?
 
-*System* is whatever the Supervisor doesn't attribute: container images (including old add-on versions left behind), container logs and the systemd journal. Home Assistant Core can't see those, and Disk Wait deliberately doesn't ask for more access. To break it down, use the *Advanced SSH & Web Terminal* add-on with protection mode off:
+*System* is whatever the Supervisor doesn't attribute: container images (including old add-on versions left behind), container logs and the systemd journal. Home Assistant Core can't see those, and Host Vitals deliberately doesn't ask for more access. To break it down, use the *Advanced SSH & Web Terminal* add-on with protection mode off:
 
 ```sh
 docker system df -v | head -40      # images, containers, volumes
@@ -126,7 +126,7 @@ This is designed to run forever in the background and cost close to nothing.
 ## Security
 
 - No web UI, no listening sockets, no outbound connections, no cloud. `iot_class: local_polling`.
-- Read-only. It opens files under `/proc` and `/sys/class/thermal`, and calls `statvfs`/`stat` on `/config` and the recorder DB. The reports make read-only `SELECT`s and read-only Supervisor API calls using the access Home Assistant Core already has. Disk Wait never deletes, prunes or changes anything.
+- Read-only. It opens files under `/proc` and `/sys/class/thermal`, and calls `statvfs`/`stat` on `/config` and the recorder DB. The reports make read-only `SELECT`s and read-only Supervisor API calls using the access Home Assistant Core already has. Host Vitals never deletes, prunes or changes anything.
 - It needs no add-on, no privileged access and no protection-mode changes.
 
 ## Does a custom component see the right data?
@@ -135,11 +135,17 @@ Yes. On HA OS, Home Assistant Core runs in a container on the same kernel and in
 
 ## Install
 
-**HACS:** HACS → ⋮ → Custom repositories → add `https://github.com/GarbledMess/disk-wait` as type *Integration*. Then install *Disk Wait* and restart Home Assistant.
+**Upgrading from Disk Wait:** this integration used to be called Disk Wait (`disk_wait`).
+1. Remove *Disk Wait* under **Settings → Devices & services**, then remove it in HACS and restart.
+2. Install Host Vitals as below and add it again.
 
-**Manual:** copy `custom_components/disk_wait` into `/config/custom_components/` and restart Home Assistant.
+Do step 1 first. The new sensors then get the same entity IDs, so history, graphs and long-term statistics carry on. Automations that call `disk_wait.recorder_report` or `disk_wait.storage_report` need changing to `host_vitals.…`.
 
-Then go to **Settings → Devices & services → Add integration → Disk Wait**. The form pre-selects the disk that holds `/config` and the interface with the default route. On a Home Assistant Green the eMMC is usually `mmcblk0` and a microSD card `mmcblk1`. Pick both to compare. You can change any of this later with **Configure**.
+**HACS:** HACS → ⋮ → Custom repositories → add `https://github.com/GarbledMess/host-vitals` as type *Integration*. Then install *Host Vitals* and restart Home Assistant.
+
+**Manual:** copy `custom_components/host_vitals` into `/config/custom_components/` and restart Home Assistant.
+
+Then go to **Settings → Devices & services → Add integration → Host Vitals**. The form pre-selects the disk that holds `/config` and the interface with the default route. On a Home Assistant Green the eMMC is usually `mmcblk0` and a microSD card `mmcblk1`. Pick both to compare. You can change any of this later with **Configure**.
 
 ## Reading the numbers
 
