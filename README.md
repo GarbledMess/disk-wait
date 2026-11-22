@@ -50,6 +50,15 @@ Host Vitals flags values that are bad **now**, and values that are **heading som
 
 Both clear by themselves when the value recovers.
 
+**Why it's happening.** Each Repairs entry, and the Health reason sensor, says what is most likely behind the problem:
+
+- **Disk and I/O problems:** how much of the disk's traffic is Home Assistant itself and how much comes from outside it (add-ons or the OS), plus the entities that changed state most in the last few minutes. Each change is a database write.
+- **CPU and memory problems:** how much Home Assistant itself is using, and the busiest add-ons.
+- **Event loop lag:** Home Assistant's CPU use and its busiest entities.
+- **Database growth:** the busiest entities.
+
+Home Assistant Core can't see other processes or per-add-on disk use (the Supervisor's counters for that read 0 on current HA OS), so for I/O the add-on list is ranked by CPU as a proxy. When everything is healthy this costs one counter increment per state change. Add-on stats are asked from the Supervisor only while a relevant problem is active, at most every 5 minutes. A **Home Assistant disk writes** sensor shows Home Assistant's own share all the time.
+
 **Now** checks use the median of the last 5 minutes of readings, so a value has to be bad for most of that window, and one long stall can't raise anything. Once raised, a check only clears below 90 % of its threshold, so it doesn't flap. Checks that load naturally pushes up (loop lag, pressure, iowait, CPU, disk busy and latency) are paused for 10 minutes after Home Assistant starts, and while one of Host Vitals's own reports runs plus 2 minutes after. Anything already raised is held during the pause rather than cleared. The sensors themselves keep recording the real values.
 
 | Check | Warning | Problem |

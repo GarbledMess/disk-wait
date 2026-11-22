@@ -142,6 +142,23 @@ SYSTEM_SENSORS: tuple[SystemSensor, ...] = (
         suggested_display_precision=0,
     ),
     SystemSensor(
+        key="ha_disk_write",
+        translation_key="ha_disk_write",
+        native_unit_of_measurement=UnitOfDataRate.KIBIBYTES_PER_SECOND,
+        device_class=SensorDeviceClass.DATA_RATE,
+        state_class=M,
+        suggested_display_precision=0,
+    ),
+    SystemSensor(
+        key="ha_disk_read",
+        translation_key="ha_disk_read",
+        native_unit_of_measurement=UnitOfDataRate.KIBIBYTES_PER_SECOND,
+        device_class=SensorDeviceClass.DATA_RATE,
+        state_class=M,
+        suggested_display_precision=0,
+        entity_registry_enabled_default=False,
+    ),
+    SystemSensor(
         key="loop_lag",
         translation_key="loop_lag",
         native_unit_of_measurement=UnitOfTime.MILLISECONDS,
@@ -328,7 +345,7 @@ class HealthEntity(_Base):
         }
 
 
-def health_reason(findings: dict[str, Any]) -> str:
+def health_reason(findings: dict[str, Any], short: dict[str, str] | None = None) -> str:
     """One line saying what is wrong, worst first, e.g.
     "Problem: CPU iowait high · Warning: Data disk rising".
 
@@ -339,11 +356,14 @@ def health_reason(findings: dict[str, Any]) -> str:
         return "All clear"
     parts = []
     for level, title in ((PROBLEM, "Problem"), (WARNING, "Warning")):
-        names = [
-            f"{f.name} {'rising' if f.kind == 'trend' else 'high'}"
-            for f in sorted(findings.values(), key=lambda f: f.id)
-            if f.level == level
-        ]
+        names = []
+        for f in sorted(findings.values(), key=lambda f: f.id):
+            if f.level != level:
+                continue
+            name = f"{f.name} {'rising' if f.kind == 'trend' else 'high'}"
+            if why := (short or {}).get(f.id):
+                name += f" ({why})"
+            names.append(name)
         if names:
             parts.append(f"{title}: {', '.join(names)}")
     text = " · ".join(parts)
@@ -362,7 +382,7 @@ class HealthReasonEntity(_Base):
 
     @property
     def native_value(self) -> str:
-        return health_reason(self.coordinator.findings)
+        return health_reason(self.coordinator.findings, self.coordinator.culprit_short)
 
     @property
     def icon(self) -> str:

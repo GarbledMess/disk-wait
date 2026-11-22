@@ -142,7 +142,8 @@ async def test_setup_and_rates(hass: HomeAssistant, freezer) -> None:
     # After the grace period the same readings are a problem: 40 % iowait and
     # 30 % I/O pressure. The disk's 100 ms write latency and 75 % busy are fine.
     c._quiet_until = 0
-    for _ in range(10):  # a full smoothing window at a 30 s interval
+    for i in range(10):  # a full smoothing window at a 30 s interval
+        hass.states.async_set("sensor.chatty", str(i))
         c._check_health(c.data, False)
     c.async_update_listeners()
     await hass.async_block_till_done()
@@ -156,6 +157,12 @@ async def test_setup_and_rates(hass: HomeAssistant, freezer) -> None:
     issues = ir.async_get(hass).issues
     assert (DOMAIN, "health_iowait") in issues
     assert issues[(DOMAIN, "health_iowait")].severity == ir.IssueSeverity.ERROR
+    # The "why": Home Assistant's own I/O share and the busiest entities.
+    cause = issues[(DOMAIN, "health_iowait")].translation_placeholders["cause"]
+    assert "outside Home Assistant" in cause
+    assert "sensor.chatty (10)" in cause
+    assert "sensor.system_performance" not in cause  # our own sensors are left out
+    assert "CPU iowait high (mostly outside HA)" in reason
 
     # Running one of our own reports pauses the checks again; findings are held.
     c.async_report_started()

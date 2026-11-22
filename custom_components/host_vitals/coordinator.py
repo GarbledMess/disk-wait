@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import timedelta
 import asyncio
 import logging
@@ -15,6 +16,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.util import dt as dt_util
 
 from . import proc
+from .culprits import CulpritTracker
 from .health import LOAD_SENSITIVE, PROBLEM, TREND_RULES, Finding, HealthMonitor
 from .const import (
     CONF_DISKS,
@@ -59,7 +61,12 @@ class HostVitalsCoordinator(DataUpdateCoordinator[proc.Metrics]):
         self.health = HealthMonitor(interval)
         self.findings: dict[str, Finding] = {}
         self._repairs = bool(opts.get(CONF_REPAIRS, True))
-        self._raised: dict[str, str] = {}  # issue id -> level currently in Repairs
+        self._raised: dict[str, tuple[str, str]] = {}  # issue id -> (level, cause) in Repairs
+        self.culprits: CulpritTracker | None = None
+        self.culprit_short: dict[str, str] = {}
+        self._culprit_version = -1
+        self._own: set[str] | None = None
+        self._window_polls = max(1, round(300 / interval))
         # Load-sensitive checks are paused until this monotonic time.
         self._quiet_until = time.monotonic() + STARTUP_GRACE
         self._reports_running = 0
@@ -100,6 +107,17 @@ class HostVitalsCoordinator(DataUpdateCoordinator[proc.Metrics]):
 
         self.sources = await self.hass.async_add_executor_job(_discover)
         self._schedule_probe()
+        self.culprits = CulpritTracker(self.hass, self._window_polls, self._own_entity_ids)
+
+    @callback
+    def _own_entity_ids(self) -> set[str]:
+        if self._own is None:
+            registry = er.async_get(self.hass)
+            self._own = {
+                e.entity_id
+                for e in er.async_entries_for_config_entry(registry, self.config_entry.entry_id)
+            }
+        return self._own
 
     # -------------------------------------------------- event loop lag probe
 
@@ -121,6 +139,8 @@ class HostVitalsCoordinator(DataUpdateCoordinator[proc.Metrics]):
         if self._probe:
             self._probe.cancel()
             self._probe = None
+        if self.culprits:
+            self.culprits.async_stop()
 
     # -------------------------------------------------- polling
 
@@ -171,7 +191,24 @@ class HostVitalsCoordinator(DataUpdateCoordinator[proc.Metrics]):
             # nothing new is raised and nothing already raised is cleared.
             system = {k: v for k, v in system.items() if k not in LOAD_SENSITIVE}
             disks = {name: {} for name in disks}
-        self.findings = self.health.evaluate(system, disks, trends=slow)
+        previous = self.findings
+        findings = self.health.evaluate(system, disks, trends=slow)
+        if self.culprits:
+            self.culprits.rotate()
+            refresh_all = slow or self.culprits.version != self._culprit_version
+            self._culprit_version = self.culprits.version
+            for fid, f in findings.items():
+                # Explanations are rebuilt when a finding first appears, every
+                # 5 minutes, or when fresh add-on stats arrive; carried otherwise.
+                if refresh_all or fid not in previous or fid not in self.culprit_short:
+                    f = findings[fid] = replace(f, cause=self.culprits.explain(f, metrics))
+                    self.culprit_short[fid] = self.culprits.short(f, metrics)
+            for fid in list(self.culprit_short):
+                if fid not in findings:
+                    del self.culprit_short[fid]
+            self.culprits.maybe_refresh_addons(findings)
+            self.health.set_active(findings)
+        self.findings = findings
         if self._repairs:
             self._sync_repairs()
 
@@ -184,7 +221,7 @@ class HostVitalsCoordinator(DataUpdateCoordinator[proc.Metrics]):
                 ir.async_delete_issue(self.hass, DOMAIN, issue_id)
                 del self._raised[issue_id]
         for issue_id, f in wanted.items():
-            if self._raised.get(issue_id) == f.level:
+            if self._raised.get(issue_id) == (f.level, f.cause):
                 continue  # unchanged: don't touch the registry (it saves to disk)
             ir.async_create_issue(
                 self.hass,
@@ -193,9 +230,14 @@ class HostVitalsCoordinator(DataUpdateCoordinator[proc.Metrics]):
                 is_fixable=False,
                 severity=ir.IssueSeverity.ERROR if f.level == PROBLEM else ir.IssueSeverity.WARNING,
                 translation_key="trend" if f.kind == "trend" else "now",
-                translation_placeholders={"name": f.name, "summary": f.summary, "hint": f.hint},
+                translation_placeholders={
+                    "name": f.name,
+                    "summary": f.summary,
+                    "cause": f.cause,
+                    "hint": f.hint,
+                },
             )
-            self._raised[issue_id] = f.level
+            self._raised[issue_id] = (f.level, f.cause)
 
     @callback
     def async_clear_repairs(self) -> None:

@@ -159,6 +159,12 @@
       },
       "health_reason": {
         "name": "Health reason"
+      },
+      "ha_disk_write": {
+        "name": "Home Assistant disk writes"
+      },
+      "ha_disk_read": {
+        "name": "Home Assistant disk reads"
       }
     },
     "button": {
@@ -207,11 +213,11 @@
   "issues": {
     "now": {
       "title": "{name} needs attention",
-      "description": "{summary}\n\n{hint}\n\nThis clears by itself once the value has been back under the threshold for a few minutes."
+      "description": "{summary}\n\n{cause}\n\n{hint}\n\nThis clears by itself once the value has been back under the threshold for a few minutes."
     },
     "trend": {
       "title": "{name} is heading for trouble",
-      "description": "{summary}\n\n{hint}\n\nThis is a forecast from the last few days of readings, and it clears by itself if the trend levels off."
+      "description": "{summary}\n\n{cause}\n\n{hint}\n\nThis is a forecast from the last few days of readings, and it clears by itself if the trend levels off."
     }
   }
 }

@@ -84,6 +84,28 @@ class Finding:
     name: str
     summary: str
     hint: str
+    category: str = "other"  # what kind of culprit to look for (see CATEGORY)
+    cause: str = ""  # filled in by the coordinator: what is likely causing it
+
+
+# Which culprits explain each check.
+CATEGORY = {
+    "loop_lag": "lag",
+    "io_pressure_some": "io",
+    "iowait": "io",
+    "busy": "io",
+    "write_latency": "io",
+    "read_latency": "io",
+    "memory_pressure_some": "memory",
+    "memory_used": "memory",
+    "swap_used": "memory",
+    "cpu_pressure_some": "cpu",
+    "cpu": "cpu",
+    "cpu_temperature": "cpu",
+    "ha_memory": "ha_memory",
+    "db_size": "recorder",
+    "disk_used": "storage",
+}
 
 
 SYSTEM_RULES = (
@@ -241,6 +263,8 @@ class HealthMonitor:
             name=label,
             summary=f"{label} is {_fmt(v)} {rule.unit} (threshold {_fmt(threshold)} {rule.unit}).",
             hint=rule.hint,
+            category=CATEGORY.get(rule.key, "other"),
+            cause=was.cause if was else "",
         )
 
     def _trend(self, rule: TrendRule, now_value: float | None) -> Finding | None:
@@ -254,6 +278,7 @@ class HealthMonitor:
         if span < MIN_SPAN_SECONDS or r2 < MIN_R2 or slope <= 0:
             return None
         fid = f"trend_{rule.key}"
+        prev = self._active.get(fid)
         current = now_value if now_value is not None else hist[-1][1]
         if rule.limit is None:
             per_day = slope * DAY
@@ -271,6 +296,8 @@ class HealthMonitor:
                     f"over the last {_fmt_duration(span)} (now {_fmt(current)} {rule.unit})."
                 ),
                 hint=rule.hint,
+                category=CATEGORY.get(rule.key, "other"),
+                cause=prev.cause if prev else "",
             )
         if current >= rule.limit:
             return None  # the "now" rule covers it
@@ -293,6 +320,8 @@ class HealthMonitor:
                 f"reaches {_fmt(rule.limit)} {rule.unit} in about {_fmt_duration(eta)}."
             ),
             hint=rule.hint,
+            category=CATEGORY.get(rule.key, "other"),
+            cause=was.cause if was else "",
         )
 
     def evaluate(
@@ -323,6 +352,10 @@ class HealthMonitor:
                 found[fid] = f
         self._active = found
         return found
+
+    def set_active(self, findings: dict[str, Finding]) -> None:
+        """Store findings after the caller has attached causes to them."""
+        self._active = findings
 
     @staticmethod
     def overall(findings: dict[str, Finding]) -> str:

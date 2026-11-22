@@ -29,6 +29,7 @@ PROC_PSI = {
 }
 PROC_SELF_STAT = "/proc/self/stat"
 PROC_SELF_STATM = "/proc/self/statm"
+PROC_SELF_IO = "/proc/self/io"
 PROC_MOUNTINFO = "/proc/self/mountinfo"
 THERMAL_DIR = "/sys/class/thermal"
 
@@ -85,6 +86,7 @@ class Snapshot:
     psi: dict[str, tuple[int | None, int | None]] = field(default_factory=dict)
     vm: dict[bytes, int] = field(default_factory=dict)
     self_ticks: int | None = None
+    self_io: tuple[int, int] | None = None  # HA's own (read_bytes, write_bytes)
     gauges: dict[str, float | None] = field(default_factory=dict)
 
 
@@ -214,6 +216,18 @@ def parse_net_dev(text: str, wanted: frozenset[str] | set[str] | None = None) ->
     return out
 
 
+def parse_self_io(text: str) -> tuple[int, int] | None:
+    """Bytes this process (Home Assistant) made the block layer read and write."""
+    vals = {}
+    for line in text.splitlines():
+        key, _, val = line.partition(":")
+        if key in ("read_bytes", "write_bytes"):
+            vals[key] = int(val)
+    if len(vals) != 2:
+        return None
+    return vals["read_bytes"], vals["write_bytes"]
+
+
 def parse_self_ticks(text: str) -> int | None:
     """utime + stime of this process (Home Assistant) in clock ticks."""
     # comm (field 2) can contain spaces; split after its closing paren.
@@ -276,6 +290,8 @@ def read_snapshot(src: Sources, slow: bool = False) -> Snapshot:
 
     if text := _read(PROC_SELF_STAT):
         snap.self_ticks = parse_self_ticks(text)
+    if text := _read(PROC_SELF_IO):
+        snap.self_io = parse_self_io(text)
     if text := _read(PROC_SELF_STATM):
         g["ha_memory"] = round(int(text.split()[1]) * PAGE_SIZE / MIB)
 
@@ -340,6 +356,13 @@ def compute(old: Snapshot, new: Snapshot) -> Metrics:
         if d_total and d_idle is not None and d_wait is not None:
             s["cpu"] = _pct(d_total - d_idle, d_total)
             s["iowait"] = _pct(d_wait, d_total)
+
+    if old.self_io and new.self_io:
+        d_r = _delta(new.self_io[0], old.self_io[0])
+        d_w = _delta(new.self_io[1], old.self_io[1])
+        if d_r is not None and d_w is not None:
+            s["ha_disk_read"] = round(d_r / 1024 / elapsed, 1)
+            s["ha_disk_write"] = round(d_w / 1024 / elapsed, 1)
 
     if old.self_ticks is not None and new.self_ticks is not None:
         d = _delta(new.self_ticks, old.self_ticks)
