@@ -137,6 +137,7 @@ async def test_setup_and_rates(hass: HomeAssistant, freezer) -> None:
     c = entry.runtime_data
     assert c.quiet
     assert state("sensor.system_performance_health") == "ok"
+    assert state("sensor.system_performance_health_reason") == "All clear"
 
     # After the grace period the same readings are a problem: 40 % iowait and
     # 30 % I/O pressure. The disk's 100 ms write latency and 75 % busy are fine.
@@ -146,6 +147,8 @@ async def test_setup_and_rates(hass: HomeAssistant, freezer) -> None:
     c.async_update_listeners()
     await hass.async_block_till_done()
     assert state("sensor.system_performance_health") == "problem"
+    reason = state("sensor.system_performance_health_reason")
+    assert reason.startswith("Problem: ") and "CPU iowait high" in reason and "I/O pressure high" in reason
     issue_names = hass.states.get("sensor.system_performance_health").attributes["issues"]
     assert "CPU iowait (now, problem)" in issue_names
     assert "I/O pressure (now, problem)" in issue_names

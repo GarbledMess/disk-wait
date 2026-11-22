@@ -44,7 +44,8 @@ Sensors that are off by default can be enabled from the entity's settings. Press
 
 Disk Wait flags values that are bad **now**, and values that are **heading somewhere bad**:
 
-- a **Health** sensor (`OK`, `Warning` or `Problem`) on the *System performance* device, with an `issues` attribute naming what is firing. You can use it for a dashboard badge, a conditional card or an automation;
+- a **Health** sensor (`OK`, `Warning` or `Problem`) on the *System performance* device, for dashboard badges, conditional cards and automations;
+- a **Health reason** sensor whose state says what is wrong, worst first, for example `Problem: Disk mmcblk1 write latency high · Warning: Data disk rising`, or `All clear`;
 - an entry under **Settings → Repairs** for each problem, with the value, the threshold, and what to check next. Turn this off under **Configure** if you only want the sensor.
 
 Both clear by themselves when the value recovers.

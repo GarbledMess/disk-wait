@@ -227,7 +227,7 @@ async def async_setup_entry(
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     c = entry.runtime_data
-    entities: list[SensorEntity] = [HealthEntity(c)]
+    entities: list[SensorEntity] = [HealthEntity(c), HealthReasonEntity(c)]
     entities += [
         SystemEntity(c, desc) for desc in SYSTEM_SENSORS if desc.available_if(c)
     ]
@@ -326,3 +326,47 @@ class HealthEntity(_Base):
                 for f in sorted(self.coordinator.findings.values(), key=lambda f: f.id)
             ]
         }
+
+
+def health_reason(findings: dict[str, Any]) -> str:
+    """One line saying what is wrong, worst first, e.g.
+    "Problem: CPU iowait high · Warning: Data disk rising".
+
+    Names only, no numbers, so the state changes only when the set of
+    problems changes (the numbers are in the Repairs entry).
+    """
+    if not findings:
+        return "All clear"
+    parts = []
+    for level, title in ((PROBLEM, "Problem"), (WARNING, "Warning")):
+        names = [
+            f"{f.name} {'rising' if f.kind == 'trend' else 'high'}"
+            for f in sorted(findings.values(), key=lambda f: f.id)
+            if f.level == level
+        ]
+        if names:
+            parts.append(f"{title}: {', '.join(names)}")
+    text = " · ".join(parts)
+    return text if len(text) <= 255 else text[:254] + "…"
+
+
+class HealthReasonEntity(_Base):
+    """Why Health isn't OK, as plain text right in the state."""
+
+    _attr_translation_key = "health_reason"
+
+    def __init__(self, coordinator: DiskWaitCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.config_entry.entry_id}_health_reason"
+        self._attr_device_info = self._device("system", "System performance")
+
+    @property
+    def native_value(self) -> str:
+        return health_reason(self.coordinator.findings)
+
+    @property
+    def icon(self) -> str:
+        level = HealthMonitor.overall(self.coordinator.findings)
+        return {OK: "mdi:check-circle-outline", WARNING: "mdi:alert-outline"}.get(
+            level, "mdi:alert-octagon-outline"
+        )
