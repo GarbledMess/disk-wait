@@ -53,10 +53,10 @@ On a large SQLite database on a slow card the query can take tens of seconds. It
 
 **Analyze storage** (`disk_wait.storage_report`, HA OS / Supervised only) asks the Supervisor and shows:
 - the data disk breakdown you see under *Settings → System → Storage* (System, App data, Media, Share, Backups, Home Assistant), with the biggest folders in each;
-- each add-on's data size, memory, CPU and bytes written to disk since it started, which helps you spot the add-on wearing out a microSD card;
+- each add-on's data size, memory and CPU. Bytes written since start are shown only where the Supervisor reports them: it reads Docker's older cgroup v1 counters, which are always 0 on current HA OS;
 - backups: how many there are, how much space they use on this device, the oldest and newest, and the largest.
 
-The Supervisor computes the disk breakdown by walking the data partition, so expect it to take a while on a microSD card.
+The Supervisor measures the disk by walking the whole data partition. On a microSD card that can take minutes, so Disk Wait waits up to 10 minutes and shows a "measuring" notification in the meantime.
 
 ### What's in "System"?
 

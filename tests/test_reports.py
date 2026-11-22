@@ -56,7 +56,7 @@ async def test_storage_report(hass: HomeAssistant) -> None:
             SimpleNamespace(slug="core_esphome", name="ESPHome", state="stopped"),
         ]
     )
-    client.host.get_disk_usage = AsyncMock(
+    usage = AsyncMock(
         return_value=_node(
             "root",
             44 * gib,
@@ -83,7 +83,10 @@ async def test_storage_report(hass: HomeAssistant) -> None:
             SimpleNamespace(name="Cloud", date=datetime(2026, 11, 20, tzinfo=UTC), type="full", location_attributes={"cloud": loc}),
         ]
     )
-    with patch("homeassistant.components.hassio.get_supervisor_client", return_value=client):
+    with (
+        patch("homeassistant.components.hassio.get_supervisor_client", return_value=client),
+        patch.object(reports, "_disk_usage", usage),
+    ):
         r = await reports.storage_report(hass, 0)
 
     assert r["errors"] == []
@@ -99,3 +102,33 @@ async def test_storage_report(hass: HomeAssistant) -> None:
 
     md = reports.storage_markdown(r)
     assert "AdGuard Home" in md and "9.0 GiB" in md and "stopped" in md
+    assert "Written since start" in md
+
+    # cgroup v2: Supervisor reports 0 writes for everyone -> column hidden
+    for a in r["addons"]:
+        a["disk_written_bytes"] = 0 if a["running"] else None
+    md = reports.storage_markdown(r)
+    assert "Written since start" not in md and "reports 0" in md
+
+    # Slow card: the disk walk times out -> clear error, data shown as n/a
+    usage.side_effect = TimeoutError
+    with (
+        patch("homeassistant.components.hassio.get_supervisor_client", return_value=client),
+        patch.object(reports, "_disk_usage", usage),
+    ):
+        r = await reports.storage_report(hass, 0)
+    assert "disk" not in r and "took over" in r["errors"][0]
+    md = reports.storage_markdown(r)
+    assert md.startswith("**Some parts could not be read:**") and "| n/a |" in md
+
+
+async def test_disk_usage_uses_long_timeout() -> None:
+    raw = MagicMock()
+    raw.get = AsyncMock(return_value=SimpleNamespace(data={"id": "root", "used_bytes": 1, "children": [
+        {"id": "apps_data", "used_bytes": 1, "children": [{"id": "core_x", "used_bytes": 1}]}]}))
+    client = SimpleNamespace(host=SimpleNamespace(_client=raw))
+    usage = await reports._disk_usage(client)
+    assert usage.children[0].children[0].id == "core_x"
+    kwargs = raw.get.await_args.kwargs
+    assert kwargs["params"] == {"max_depth": "2"}
+    assert kwargs["timeout"].total == reports.DISK_USAGE_TIMEOUT

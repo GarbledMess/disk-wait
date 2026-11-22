@@ -212,6 +212,28 @@ def _usage_tree(node: Any, names: dict[str, str]) -> dict[str, Any]:
     }
 
 
+DISK_USAGE_TIMEOUT = 600  # seconds
+
+
+async def _disk_usage(client: Any) -> Any:
+    """GET host/disks/default/usage at depth 2 (per-add-on), with a long timeout."""
+    from aiohttp import ClientTimeout  # noqa: PLC0415
+
+    try:
+        from aiohasupervisor.models.host import DiskUsage  # noqa: PLC0415
+
+        raw = client.host._client  # noqa: SLF001 - public method has no timeout argument
+        result = await raw.get(
+            "host/disks/default/usage",
+            params={"max_depth": "2"},
+            timeout=ClientTimeout(total=DISK_USAGE_TIMEOUT),
+        )
+        return DiskUsage.from_dict(result.data)
+    except (AttributeError, ImportError, TypeError):
+        # Library internals changed; fall back to the public call.
+        return await client.host.get_disk_usage(max_depth=2)
+
+
 async def storage_report(hass: HomeAssistant, limit: int) -> dict[str, Any]:
     """Data disk breakdown, add-on data/memory/disk writes, and backups."""
     if "hassio" not in hass.config.components:
@@ -222,6 +244,10 @@ async def storage_report(hass: HomeAssistant, limit: int) -> dict[str, Any]:
 
     client = get_supervisor_client(hass)
     report: dict[str, Any] = {"errors": []}
+    # The Supervisor walks the whole data partition for this, which on a
+    # microSD card takes far longer than the client's 10 s default timeout.
+    # Start it first so the other calls overlap with it.
+    disk_task = asyncio.create_task(_disk_usage(client))
 
     addons = []
     try:
@@ -231,12 +257,17 @@ async def storage_report(hass: HomeAssistant, limit: int) -> dict[str, Any]:
     names = {a.slug: a.name for a in addons}
 
     try:
-        usage = await client.host.get_disk_usage(max_depth=2)
+        usage = await disk_task
         report["disk"] = _usage_tree(usage, names)
+    except TimeoutError:
+        report["errors"].append(
+            f"disk breakdown: the Supervisor took over {DISK_USAGE_TIMEOUT // 60} min "
+            "to measure the data disk"
+        )
     except SupervisorError as err:
-        report["errors"].append(f"disk usage (needs a recent Supervisor): {err}")
+        report["errors"].append(f"disk breakdown: {err}")
     except AttributeError:
-        report["errors"].append("disk usage: this Home Assistant version is too old")
+        report["errors"].append("disk breakdown: this Home Assistant version is too old")
 
     data_sizes: dict[str, int] = {}
     for child in report.get("disk", {}).get("children", []):
@@ -306,6 +337,8 @@ async def storage_report(hass: HomeAssistant, limit: int) -> dict[str, Any]:
 
 def storage_markdown(r: dict[str, Any]) -> str:
     lines: list[str] = []
+    if r.get("errors"):
+        lines += ["**Some parts could not be read:** " + "; ".join(r["errors"]) + ".", ""]
     disk = r.get("disk")
     if disk:
         total = disk.get("total_bytes")
@@ -319,19 +352,32 @@ def storage_markdown(r: dict[str, Any]) -> str:
             for g in c["children"][:5]:
                 lines.append(f"| &nbsp;&nbsp;↳ {g['label']} | {_mib(g['used_bytes'])} |")
     if r.get("addons"):
+        no_data = "disk" not in r
+        # Supervisor reads writes from Docker's cgroup v1 blkio fields; on
+        # cgroup v2 hosts (current HA OS) they always come back as 0.
+        writes = any(a["disk_written_bytes"] for a in r["addons"])
         lines += [
             "",
             "### Add-ons",
-            "| Add-on | Data | Memory | CPU | Written since start |",
-            "|---|--:|--:|--:|--:|",
+            "| Add-on | Data | Memory | CPU |" + (" Written since start |" if writes else ""),
+            "|---|--:|--:|--:|" + ("--:|" if writes else ""),
         ]
         for a in r["addons"]:
-            lines.append(
-                f"| {a['name']} | {_mib(a['data_bytes'])} | "
+            data = "n/a" if no_data else _mib(a["data_bytes"] or 0)
+            row = (
+                f"| {a['name']} | {data} | "
                 f"{_mib(a['memory_bytes']) if a['running'] else 'stopped'} | "
-                f"{'' if a['cpu_percent'] is None else str(a['cpu_percent']) + ' %'} | "
-                f"{_mib(a['disk_written_bytes']) if a['running'] else ''} |"
+                f"{'' if a['cpu_percent'] is None else str(a['cpu_percent']) + ' %'} |"
             )
+            if writes:
+                row += f" {_mib(a['disk_written_bytes']) if a['running'] else ''} |"
+            lines.append(row)
+        if not writes:
+            lines += [
+                "",
+                "Per-add-on disk writes aren't shown because the Supervisor reports 0 "
+                "for every add-on on this system.",
+            ]
     b = r.get("backups")
     if b:
         lines += [
@@ -355,6 +401,4 @@ def storage_markdown(r: dict[str, Any]) -> str:
         "journal. Home Assistant can't look inside it. See the Disk Wait README "
         "for the SSH commands that break it down.",
     ]
-    if r.get("errors"):
-        lines += ["", "Some parts could not be read: " + "; ".join(r["errors"])]
     return "\n".join(lines)

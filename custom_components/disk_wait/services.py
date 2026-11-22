@@ -63,6 +63,14 @@ async def run_recorder_report(
 async def run_storage_report(
     hass: HomeAssistant, limit: int = 0, notify: bool = True
 ) -> dict[str, Any]:
+    if notify:
+        persistent_notification.async_create(
+            hass,
+            "Measuring the data disk. On a microSD card this can take a few minutes; "
+            "this notification will be replaced with the report.",
+            title="Disk Wait: storage report",
+            notification_id=f"{DOMAIN}_storage_report",
+        )
     result = await _exclusive(hass, reports.storage_report(hass, limit))
     if notify:
         persistent_notification.async_create(
